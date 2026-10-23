@@ -11,6 +11,26 @@
 
 本 flake 只负责把 Operit2 构建出来、并提供一个可选的常驻 Link 节点模块。**节点之间的网络可达性不在范围内**：局域网、公网、WireGuard/Tailscale 或其它 overlay 由使用者自行决定，只需把 Link 端口在对应网卡上放行。
 
+## 构建图
+
+上游是 Flutter + Rust 的 monorepo，构建期还会生成插件资源，所以打包被拆成四个 derivation：
+
+```
+                     ┌── cli.nix ──────────────→ operit2-cli
+source.nix ──┬───────┤
+             │       └── flutter-bridge.nix ──→ desktop.nix ──→ operit2-desktop
+             └────────→ plugin-assets.nix ──┬─→ (cli)
+                                             └─→ (flutter-bridge)
+```
+
+- `plugin-assets` 是 `cli` 和 `flutter-bridge` 的共同输入：上游的
+  `core/crates/runtime/application/build.rs` 会把 `assets/plugins/` 嵌进二进制，
+  所以三者必须用同一份输出，单独做一次比在每个产物里各跑一遍同步脚本省事。
+- `flutter-bridge` 是 `desktop` 的输入：上游 GUI 的 CMake 里直接 `cargo build`，
+  拆出来之后 GUI 的配置就不必关心 Rust 工具链。
+
+每个文件顶部的注释说明了它为什么存在；改动前先读 [AGENTS.md](./AGENTS.md)。
+
 ## 快速开始
 
 ```nix
@@ -87,11 +107,13 @@ programs.operit2-cli.enable = true;
 - `homeModules.default` / `homeModules.desktop`：`programs.operit2-desktop.enable`（Home Manager GUI）
 - `packages.x86_64-linux.{operit2-desktop,operit2-cli,default}`
 - `overlays.default`：注入 `pkgs.operit2-desktop` / `pkgs.operit2-cli`
+- `formatter.x86_64-linux`：`nix fmt` 用 nixfmt
 
 ## 已知限制
 
 - 桌面 GUI 单进程，关闭即退出，没有后台常驻；需要 7×24 在线时用服务器上的 `services.operit2-link`。
 - 上游 FVM 固定的是 `3.41.10-ohos` 分支，本包用 nixpkgs 的 `flutter341`（3.41.9），差异是否影响 Linux 构建以实际构建为准。
 - 脚本式 ToolPkg（如 `workflow`）在 Nix 构建中按普通目录打包，不运行 pnpm；其 `dist/` 已随上游提交。
+- GUI 用 `autoPubspecLock` 直接读上游 `pubspec.lock`（依赖 import-from-derivation，nixpkgs 不允许，个人 flake 可以用）。
 
 维护、升级与补丁说明见 [AGENTS.md](./AGENTS.md)。

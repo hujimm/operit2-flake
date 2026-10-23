@@ -3,7 +3,6 @@
   flutter341,
   callPackage,
   gitMinimal,
-  python3,
   clang,
   cmake,
   ninja,
@@ -18,7 +17,7 @@
   gsettings-desktop-schemas,
   libsecret,
   xz,
-  # Linux Host 运行时会调用的外部程序（见 hosts/linux/src/tools）。
+  # GUI 通过 hosts/linux 在运行时调用的外部命令。
   xrandr,
   libnotify,
   xdg-utils,
@@ -33,6 +32,8 @@
   tesseract,
   gnome-screenshot,
 }:
+# Flutter 桌面 GUI。上游的 Linux runner 会自己调 CMake，所以禁用 stdenv 的
+# CMake configure hook（dontUseCmakeConfigure），其余交给 buildFlutterApplication。
 let
   source = callPackage ./source.nix { };
   flutterBridge = callPackage ./flutter-bridge.nix { };
@@ -45,7 +46,7 @@ let
     gst-libav
   ];
 
-  hostRuntimeTools = [
+  runtimeTools = [
     xrandr
     libnotify
     xdg-utils
@@ -66,9 +67,15 @@ flutter341.buildFlutterApplication {
   pname = "operit2-desktop";
   inherit (source) version src;
 
+  patches = [ ./patches/0002-nix-flutter-linux.patch ];
+
   sourceRoot = "${source.src.name}/apps/flutter/app";
-  pubspecLock = lib.importJSON ./pubspec.lock.json;
-  # 上游 pubspec 的三个 Gitee 依赖，固定在同一个 openharmony flutter_packages 提交上。
+
+  # 直接读上游的 pubspec.lock（IFD）。nixpkgs 不允许这样做，但个人 flake 可以，
+  # 好处是升级时不必再维护一份 pubspec.lock.json。
+  autoPubspecLock = source.src + "/apps/flutter/app/pubspec.lock";
+
+  # 上游 pubspec 引用同一个 openharmony flutter_packages 提交上的三个包。
   gitHashes = {
     path_provider_ohos = "sha256-KQ1NB3eVVLRPZfl5eYMfMcg98su4kzYE8Iv4x6PkHu8=";
     url_launcher_ohos = "sha256-KQ1NB3eVVLRPZfl5eYMfMcg98su4kzYE8Iv4x6PkHu8=";
@@ -82,9 +89,9 @@ flutter341.buildFlutterApplication {
     gitMinimal
     ninja
     pkg-config
-    python3
   ];
-  # Flutter 自己在 buildPhase 中调用 CMake，禁用 stdenv 的通用 CMake configure hook。
+
+  # Flutter 在 buildPhase 里自己调 CMake。
   dontUseCmakeConfigure = true;
 
   buildInputs = [
@@ -102,20 +109,15 @@ flutter341.buildFlutterApplication {
     xz
   ];
 
-  env = {
-    OPERIT_FLUTTER_BRIDGE_LIB = "${flutterBridge}/lib/liboperit_flutter_bridge.so";
-    OPERIT_NIX_BUILD = "1";
-  };
+  env.OPERIT_FLUTTER_BRIDGE_LIB = "${flutterBridge}/lib/liboperit_flutter_bridge.so";
 
   postPatch = ''
-    python3 ${./patch-source.py} "$PWD/../../.." --cmake-only
-    mkdir -p lib/core/proxy/generated
+    # bridge 的 build.rs 生成的 Dart 代理代码，GUI 侧需要。
+    install -d lib/core/proxy/generated
     install -m644 \
       ${flutterBridge}/share/operit2/dart-proxy/CoreProxyClients.g.dart \
-      lib/core/proxy/generated/CoreProxyClients.g.dart
-    install -m644 \
       ${flutterBridge}/share/operit2/dart-proxy/CoreProxyModels.g.dart \
-      lib/core/proxy/generated/CoreProxyModels.g.dart
+      lib/core/proxy/generated/
   '';
 
   postInstall = ''
@@ -125,9 +127,10 @@ flutter341.buildFlutterApplication {
       "$out/share/icons/hicolor/192x192/apps/operit2.png"
   '';
 
-  # OPERIT_DESKTOP_LAUNCHER 供 my_application.cc 写入 D-Bus 激活文件，见 patch-source.py。
+  # OPERIT_DESKTOP_LAUNCHER 让 my_application.cc 写 D-Bus 激活文件时指向
+  # 本 wrapper（而不是被改名成 .operit2-desktop-wrapped 的真二进制）。
   extraWrapProgramArgs = ''
-    --prefix PATH : "${lib.makeBinPath hostRuntimeTools}" \
+    --prefix PATH : "${lib.makeBinPath runtimeTools}" \
     --prefix GST_PLUGIN_SYSTEM_PATH_1_0 : "${lib.makeSearchPath "lib/gstreamer-1.0" gstPlugins}" \
     --set GST_PLUGIN_SCANNER "${gst_all_1.gstreamer}/libexec/gstreamer-1.0/gst-plugin-scanner" \
     --set OPERIT_DESKTOP_LAUNCHER "$out/bin/operit2-desktop"
@@ -145,15 +148,11 @@ flutter341.buildFlutterApplication {
     })
   ];
 
-  passthru = {
-    inherit flutterBridge;
-  };
+  passthru = { inherit flutterBridge; };
 
-  meta = {
-    description = "Operit2 AI Agent desktop application (Flutter GUI)";
-    homepage = "https://github.com/AAswordman/Operit2";
-    license = lib.licenses.agpl3Only;
+  meta = source.meta // {
+    description = "Operit2 AI Agent 桌面客户端（Flutter GUI）";
     mainProgram = "operit2-desktop";
-    platforms = [ "x86_64-linux" ];
+    platforms = lib.platforms.linux;
   };
 }

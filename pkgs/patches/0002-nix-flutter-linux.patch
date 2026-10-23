@@ -1,0 +1,99 @@
+diff --git a/apps/flutter/app/hook/build.dart b/apps/flutter/app/hook/build.dart
+index 168c43a..f9e6322 100644
+--- a/apps/flutter/app/hook/build.dart
++++ b/apps/flutter/app/hook/build.dart
+@@ -30,11 +30,6 @@ void main(List<String> args) async {
+     final pluginsRoot = Directory.fromUri(
+       input.packageRoot.resolve('../../../plugins/'),
+     );
+-    final syncScript = File.fromUri(
+-      input.packageRoot.resolve(
+-        '../../../plugins/tools/sync_plugin_packages.py',
+-      ),
+-    );
+     final bridgeCrate = Directory.fromUri(
+       input.packageRoot.resolve('../native/operit-flutter-bridge/'),
+     );
+@@ -95,12 +90,7 @@ void main(List<String> args) async {
+     await _addDirectoryFileDependencies(output, webRuntimeSourceDir, {'.ts'});
+     output.dependencies.add(webRuntimeTypescriptConfig.uri);
+ 
+-    await _run(_pythonExecutable(repoRoot), [
+-      syncScript.path,
+-      '--source',
+-      'runtime',
+-      '--no-hot-reload',
+-    ], workingDirectory: repoRoot.path);
++    // Nix: 插件资源已由独立 derivation 同步，此处不再调用 .venv 里的 Python。
+ 
+     if (shouldBuildWebAssets) {
+       final fontScript = File.fromUri(
+diff --git a/apps/flutter/app/linux/CMakeLists.txt b/apps/flutter/app/linux/CMakeLists.txt
+index f3defa1..506762f 100644
+--- a/apps/flutter/app/linux/CMakeLists.txt
++++ b/apps/flutter/app/linux/CMakeLists.txt
+@@ -102,7 +102,7 @@ install(FILES "${FLUTTER_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+ 
+ set(OPERIT_FLUTTER_BRIDGE_CRATE "${CMAKE_CURRENT_SOURCE_DIR}/../../native/operit-flutter-bridge")
+ install(FILES
+-  "${OPERIT_FLUTTER_BRIDGE_CRATE}/target/$<IF:$<CONFIG:Debug>,debug,release>/liboperit_flutter_bridge.so"
++  "$ENV{OPERIT_FLUTTER_BRIDGE_LIB}"
+   DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+   COMPONENT Runtime)
+ 
+diff --git a/apps/flutter/app/linux/runner/CMakeLists.txt b/apps/flutter/app/linux/runner/CMakeLists.txt
+index b6e2563..c60b6d1 100644
+--- a/apps/flutter/app/linux/runner/CMakeLists.txt
++++ b/apps/flutter/app/linux/runner/CMakeLists.txt
+@@ -29,16 +29,17 @@ target_link_libraries(${BINARY_NAME} PRIVATE ${CMAKE_DL_LIBS})
+ target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
+ 
+ set(OPERIT_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../")
+-set(OPERIT_PLUGIN_SYNC_PYTHON "${OPERIT_REPO_ROOT}/.venv/bin/python")
+-set(OPERIT_PLUGIN_SYNC_SCRIPT "${OPERIT_REPO_ROOT}/plugins/tools/sync_plugin_packages.py")
++# Nix: 内置插件资源由独立 derivation 生成（pkgs/builtin-plugins.nix），
++# 构建期不再调用 .venv 里的 Python。
+ add_custom_target(sync_operit_plugins ALL
+-  COMMAND "${OPERIT_PLUGIN_SYNC_PYTHON}" "${OPERIT_PLUGIN_SYNC_SCRIPT}" --source runtime --no-hot-reload
++  COMMAND "${CMAKE_COMMAND}" -E true
+   WORKING_DIRECTORY "${OPERIT_REPO_ROOT}"
+ )
+ 
+ set(OPERIT_FLUTTER_BRIDGE_CRATE "${CMAKE_CURRENT_SOURCE_DIR}/../../../native/operit-flutter-bridge")
++# Nix: bridge 由独立 derivation 构建，产物路径经 OPERIT_FLUTTER_BRIDGE_LIB 注入。
+ add_custom_target(operit_flutter_bridge ALL
+-  COMMAND cargo build --manifest-path "${OPERIT_FLUTTER_BRIDGE_CRATE}/Cargo.toml" $<$<NOT:$<CONFIG:Debug>>:--release>
++  COMMAND "${CMAKE_COMMAND}" -E true
+   WORKING_DIRECTORY "${OPERIT_FLUTTER_BRIDGE_CRATE}"
+ )
+ add_dependencies(operit_flutter_bridge sync_operit_plugins)
+diff --git a/apps/flutter/app/linux/runner/my_application.cc b/apps/flutter/app/linux/runner/my_application.cc
+index 82e8cfb..917c58d 100644
+--- a/apps/flutter/app/linux/runner/my_application.cc
++++ b/apps/flutter/app/linux/runner/my_application.cc
+@@ -79,7 +79,11 @@ static void register_webview_theme(FlView* view) {
+ /// Registers this installed executable for session-bus Plugin SDK activation.
+ static void register_plugin_sdk_activation() {
+   g_autoptr(GError) error = nullptr;
+-  g_autofree gchar* executable = g_file_read_link("/proc/self/exe", &error);
++  // Nix: wrapper 通过 OPERIT_DESKTOP_LAUNCHER 指回带环境的启动脚本。
++  const gchar* launcher = g_getenv("OPERIT_DESKTOP_LAUNCHER");
++  g_autofree gchar* executable =
++      (launcher != nullptr && launcher[0] != '\0') ? g_strdup(launcher)
++                                                   : g_file_read_link("/proc/self/exe", &error);
+   if (executable == nullptr) {
+     g_error("Cannot resolve Operit activation executable: %s", error->message);
+   }
+@@ -100,7 +104,11 @@ static void register_plugin_sdk_activation() {
+ /// Publishes a desktop entry that starts the standalone data rescue route.
+ static void register_data_rescue_desktop_entry() {
+   g_autoptr(GError) error = nullptr;
+-  g_autofree gchar* executable = g_file_read_link("/proc/self/exe", &error);
++  // Nix: wrapper 通过 OPERIT_DESKTOP_LAUNCHER 指回带环境的启动脚本。
++  const gchar* launcher = g_getenv("OPERIT_DESKTOP_LAUNCHER");
++  g_autofree gchar* executable =
++      (launcher != nullptr && launcher[0] != '\0') ? g_strdup(launcher)
++                                                   : g_file_read_link("/proc/self/exe", &error);
+   if (executable == nullptr) {
+     g_error("Cannot resolve Operit data rescue executable: %s", error->message);
+   }

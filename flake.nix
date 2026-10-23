@@ -1,53 +1,51 @@
 {
-  description = "Operit2（Flutter GUI + Rust CLI）的 Nix 打包：桌面应用与无界面 Link 节点（仅 x86_64-linux）";
+  description = "Operit2 的 Nix 打包：Flutter GUI、Rust CLI 与无界面 Link 节点（x86_64-linux）";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
 
   outputs =
-    {
-      self,
-      nixpkgs,
-    }:
+    { nixpkgs, ... }:
     let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
-    in
-    {
-      packages.${system} = rec {
-        operit2-desktop = pkgs.callPackage ./pkgs/desktop.nix { };
-        operit2-cli = pkgs.callPackage ./pkgs/cli.nix { };
-        default = operit2-desktop;
-      };
-
-      # 想注入 pkgs.operit2-desktop / pkgs.operit2-cli 的场合使用。
-      overlays.default = final: _prev: {
-        operit2-desktop = final.callPackage ./pkgs/desktop.nix { };
-        operit2-cli = final.callPackage ./pkgs/cli.nix { };
-      };
 
       nixosModules = {
-        # 无界面 CLI Link 节点（services.operit2-link）。
+        # 无界面 Link 节点：services.operit2-link。
         link = import ./modules/nixos-link.nix;
-        # 仅安装 CLI（programs.operit2-cli.enable）。
+        # 仅安装 CLI：programs.operit2-cli.enable。
         cli = import ./modules/nixos-cli.nix;
-        # 系统级安装 GUI（programs.operit2-desktop.enable）。
+        # 系统级安装 GUI：programs.operit2-desktop.enable。
         desktop = import ./modules/nixos-desktop.nix;
-        default = import ./modules/nixos-link.nix;
       };
 
       homeModules = {
-        # 用户级安装 GUI（programs.operit2-desktop.enable）。
+        # 用户级安装 GUI：programs.operit2-desktop.enable。
         desktop = import ./modules/home-desktop.nix;
-        default = import ./modules/home-desktop.nix;
+      };
+    in
+    {
+      packages.${system} = rec {
+        operit2-cli = pkgs.callPackage ./pkgs/cli.nix { };
+        operit2-desktop = pkgs.callPackage ./pkgs/desktop.nix { };
+        default = operit2-desktop;
+      };
+
+      # 想用 pkgs.operit2-cli / pkgs.operit2-desktop 时装它。
+      overlays.default = final: _: {
+        operit2-cli = final.callPackage ./pkgs/cli.nix { };
+        operit2-desktop = final.callPackage ./pkgs/desktop.nix { };
+      };
+
+      nixosModules = nixosModules // {
+        default = nixosModules.link;
+      };
+
+      homeModules = homeModules // {
+        default = homeModules.desktop;
       };
 
       formatter.${system} = pkgs.nixfmt;
-
-      checks.${system} = {
-        operit2-cli = pkgs.callPackage ./pkgs/cli.nix { };
-        operit2-desktop = pkgs.callPackage ./pkgs/desktop.nix { };
-      };
     };
 }

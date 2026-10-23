@@ -2,7 +2,6 @@
   lib,
   rustPlatform,
   callPackage,
-  python3,
   makeWrapper,
   coreutils,
   bash,
@@ -11,12 +10,16 @@
   procps,
   xdg-utils,
 }:
+# CLI / TUI，同时也是可常驻的无界面 Link 节点。
+# 上游的 `apps/cli` 是自包含的 Cargo 项目，所以这里只需要 buildRustPackage
+# 加一份预生成的插件资源。
 let
   source = callPackage ./source.nix { };
   pluginAssets = callPackage ./plugin-assets.nix { };
 
-  # Linux Host 运行时调用的外部程序（设备信息、打开链接、进程管理）。
-  hostRuntimeTools = [
+  # 运行时由 `hosts/linux` 直接调用的外部命令。这些路径写进 wrapper 的 PATH 后
+  # 就被 $out 引用，因此不需要再写进 buildInputs。
+  runtimeTools = [
     coreutils
     bash
     iproute2
@@ -36,39 +39,30 @@ rustPlatform.buildRustPackage {
     "--bin"
     "operit2"
   ];
-  # 上游 Linux 发布流程构建 CLI，但不运行 cargo test。
+  # 上游的 Linux 发布流程只构建、不跑 cargo test。
   doCheck = false;
+
+  patches = [ ./patches/0001-nix-runtime.patch ];
 
   nativeBuildInputs = [
     makeWrapper
-    python3
     rustPlatform.bindgenHook
   ];
 
-  # 内置插件在编译期嵌入二进制，缺少这一步 CLI 将没有任何 buildin 插件。
   postPatch = ''
-    python3 ${./patch-source.py} "$PWD"
-    mkdir -p core/crates/runtime/application/assets/plugins
-    cp -a ${pluginAssets}/plugins/buildin core/crates/runtime/application/assets/plugins/buildin
+    install -d core/crates/runtime/application/assets/plugins
+    cp -a ${pluginAssets}/plugins/. core/crates/runtime/application/assets/plugins/
   '';
 
   postInstall = ''
-    wrapProgram "$out/bin/operit2" --prefix PATH : "${lib.makeBinPath hostRuntimeTools}"
+    wrapProgram "$out/bin/operit2" --prefix PATH : ${lib.makeBinPath runtimeTools}
     ln -s operit2 "$out/bin/operit"
   '';
 
-  passthru = {
-    inherit pluginAssets;
-  };
+  passthru = { inherit pluginAssets; };
 
-  meta = {
-    description = "Operit2 Agent CLI, TUI and headless Link node";
-    homepage = "https://github.com/AAswordman/Operit2";
-    license = lib.licenses.agpl3Only;
+  meta = source.meta // {
+    description = "Operit2 Agent CLI / TUI 与无界面 Link 节点";
     mainProgram = "operit2";
-    platforms = [
-      "x86_64-linux"
-      "aarch64-linux"
-    ];
   };
 }
