@@ -62,7 +62,7 @@ inputs.operit2 = {
 
   services.operit2-link = {
     enable = true;
-    user = "root";                   # 默认 root；该用户必须已存在
+    user = "orion";                  # 必填：以你的用户身份运行，数据写你的 HOME
     bindAddress = "10.144.144.1";    # 组网场景绑虚拟网卡地址
     firewallInterfaces = [ "tun0" ]; # 只对组网网卡放行
   };
@@ -74,17 +74,17 @@ inputs.operit2 = {
 - 以 `user` 身份常驻运行 `operit2 cli link listen <transports> --bind ... --fixed-port`
 - 补上 `HOME`（systemd 默认不设，而 operit2 靠它决定数据目录）
 - 用 `SIGINT` 停止（上游只在这个信号下正常收尾）
-- 按 `openFirewall` / `firewallInterfaces` 放行端口
+- 按 `firewallInterfaces` 只在对组网的网卡上放行端口，并固定关闭 mDNS 发现
 
 节点数据写在该用户 HOME 的默认目录（`~/.local/share/operit2`、`~/.config/operit2`），
 模块会把 `operit2` 装进系统，所以以同一用户登录后执行的就是服务那份实例：
 
 ```sh
-sudo operit2 cli link token show
+operit2 cli link peers     # 查看已配对设备
 ```
 
 同一数据目录同时只应有一个运行中的 Core；与常驻服务并行执行配对类命令时，
-先 `systemctl stop operit2-link`，完成后再启动。
+先 `sudo systemctl stop operit2-link`，完成后再启动。
 
 ## 配对与组网
 
@@ -92,11 +92,11 @@ sudo operit2 cli link token show
 
 ```sh
 # 1. 在 A 上发起，B 上会显示六位验证码
-sudo operit2 cli link pair-start <B-node-id> <B-address>:37195 http
+operit2 cli link pair-start <B-node-id> <B-address>:37195 http
 # 2. 把 B 显示的验证码填回来
-sudo operit2 cli link pair-finish <pairing-id> 123456
+operit2 cli link pair-finish <pairing-id> 123456
 # 3. 配对只授予通信授权，加入同一个 Space 还要对方审批
-sudo operit2 cli link space join <B-node-id>
+operit2 cli link space join <B-node-id>
 ```
 
 - **配对**：接收端显示六位码，人工确认，无法声明式完成。

@@ -7,6 +7,8 @@
 #   * 端口放行。
 # 只装 CLI 或 GUI 不需要模块：`pkgs.operit2-cli` / `pkgs.operit2-desktop` 一行即可。
 #
+# 这是服务器模块：mDNS 发现固定关闭，防火墙只按网卡放行（没有"全部接口"开关）。
+#
 # 设备互联不在这里声明：配对需要两端人工确认六位验证码，加入 Space 需要另一台
 # 设备上的审批人批准，凭据存在该用户 HOME 下的数据目录里。这些都是运行时状态，
 # 见 README 的「配对与组网」。
@@ -23,18 +25,18 @@ let
   # 拦截交给下面的 assertions（否则会在求值期抛 attribute missing）。
   userHome = lib.attrByPath [ cfg.user "home" ] "/var/lib/operit2" config.users.users;
 
-  listenArgs =
-    [
-      "cli"
-      "link"
-      "listen"
-      (lib.concatStringsSep "," cfg.transports)
-      "--bind"
-      "${cfg.bindAddress}:${toString cfg.port}"
-      # 固定端口，方便防火墙规则与配对地址稳定；代价是端口被占用时启动失败。
-      "--fixed-port"
-    ]
-    ++ lib.optional (!cfg.discovery) "--no-discovery";
+  listenArgs = [
+    "cli"
+    "link"
+    "listen"
+    (lib.concatStringsSep "," cfg.transports)
+    "--bind"
+    "${cfg.bindAddress}:${toString cfg.port}"
+    # 固定端口，方便防火墙规则与配对地址稳定；代价是端口被占用时启动失败。
+    "--fixed-port"
+    # 服务器节点不需要 mDNS；留着只会让局域网里的设备以为这里可被发现。
+    "--no-discovery"
+  ];
 in
 {
   options.services.operit2-link = {
@@ -49,11 +51,14 @@ in
 
     user = lib.mkOption {
       type = lib.types.str;
-      default = "root";
+      example = "orion";
       description = ''
-        运行节点的用户，该用户必须已存在。节点数据写在该用户 HOME 下的默认目录
-        （`~/.local/share/operit2`、`~/.config/operit2`），所以用同一用户执行
-        `operit2 cli ...` 时操作的就是服务那份实例。
+        运行节点的用户，**必填**，该用户必须已存在。节点数据写在该用户 HOME 下的
+        默认目录（`~/.local/share/operit2`、`~/.config/operit2`），所以用同一用户
+        执行 `operit2 cli ...` 时操作的就是服务那份实例。
+
+        没有默认值是有意的：默认成 root 会让一次漏写变成"agent 以 root 运行"，
+        而节点可以执行工具，权限就是该用户的权限。
       '';
     };
 
@@ -87,18 +92,6 @@ in
         "ws"
       ];
       description = "监听哪些传输。`tcp` 不能与 `http`/`ws` 共用同一端口。";
-    };
-
-    discovery = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "是否开启 mDNS 局域网发现。服务器通常关闭。";
-    };
-
-    openFirewall = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "在所有接口上放行 Link 端口。直接暴露公网时才需要。";
     };
 
     firewallInterfaces = lib.mkOption {
@@ -147,11 +140,8 @@ in
     # 把 CLI 装进系统，方便以该用户登录后直接操作同一个实例。
     environment.systemPackages = [ cfg.package ];
 
-    networking.firewall = {
-      allowedTCPPorts = lib.optional cfg.openFirewall cfg.port;
-      interfaces = lib.genAttrs cfg.firewallInterfaces (_: {
-        allowedTCPPorts = [ cfg.port ];
-      });
-    };
+    networking.firewall.interfaces = lib.genAttrs cfg.firewallInterfaces (_: {
+      allowedTCPPorts = [ cfg.port ];
+    });
   };
 }
