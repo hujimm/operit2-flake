@@ -9,6 +9,8 @@
   inetutils,
   procps,
   xdg-utils,
+  nodejs,
+  python3,
 }:
 # CLI / TUI，同时也是可常驻的无界面 Link 节点。
 # 上游的 `apps/cli` 是自包含的 Cargo 项目，所以这里只需要 buildRustPackage
@@ -19,6 +21,8 @@ let
 
   # 运行时由 `hosts/linux` 直接调用的外部命令。这些路径写进 wrapper 的 PATH 后
   # 就被 $out 引用，因此不需要再写进 buildInputs。
+  # node/python3 是 ManagedRuntimeProgram 的默认查找目标（ToolPkg 用），缺了会直接
+  # 报 "Managed runtime executable not found"；uv/pnpm 不是必需，需要时装在系统里即可。
   runtimeTools = [
     coreutils
     bash
@@ -26,6 +30,8 @@ let
     inetutils
     procps
     xdg-utils
+    nodejs
+    python3
   ];
 in
 rustPlatform.buildRustPackage {
