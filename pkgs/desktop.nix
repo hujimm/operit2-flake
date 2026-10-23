@@ -12,6 +12,12 @@
   gtk3,
   webkitgtk_4_1,
   gst_all_1,
+  # gstreamer 的 .pc 在 Requires 里列了这些，pkg-config 会递归查找，
+  # 但 buildInputs 不传播，必须显式列出。
+  libunwind,
+  libayatana-appindicator,
+  orc,
+  elfutils,
   glib-networking,
   glib,
   gsettings-desktop-schemas,
@@ -103,6 +109,10 @@ flutter341.buildFlutterApplication {
     gst_all_1.gst-plugins-good
     gst_all_1.gst-plugins-bad
     gst_all_1.gst-libav
+    libunwind
+    libayatana-appindicator
+    orc
+    elfutils
     gtk3
     libsecret
     webkitgtk_4_1

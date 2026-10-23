@@ -34,7 +34,11 @@ rustPlatform.buildRustPackage {
 
   cargoRoot = "apps/cli";
   buildAndTestSubdir = "apps/cli";
-  cargoLock.lockFile = "${source.src}/apps/cli/Cargo.lock";
+  # 上游提交里的 apps/cli/Cargo.lock 是过期的（缺 rustls-native-certs 0.8 等条目，
+  # 因为他们本地构建不加 --locked，cargo 会静默补写）。沙箱里不能联网补写，
+  # 所以用 pkgs/locks 下重新生成的 lock 供 vendor，并在 postPatch 里把同一份
+  # 写回源码树，让 cargoSetupPostPatchHook 的一致性检查通过。
+  cargoLock.lockFile = ./locks/apps-cli.Cargo.lock;
   cargoBuildFlags = [
     "--bin"
     "operit2"
@@ -50,6 +54,9 @@ rustPlatform.buildRustPackage {
   ];
 
   postPatch = ''
+    # 覆盖上游那份过期的 lock（与 cargoLock.lockFile 同一份文件）。
+    install -m644 ${./locks/apps-cli.Cargo.lock} apps/cli/Cargo.lock
+
     install -d core/crates/runtime/application/assets/plugins
     cp -a ${pluginAssets}/plugins/. core/crates/runtime/application/assets/plugins/
   '';

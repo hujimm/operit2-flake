@@ -86,10 +86,14 @@ def rewrite_source_nix(rev: str, version: str, hash_: str) -> None:
 
 
 def verify_patches(tree: Path) -> None:
+    # GUI 补丁的路径相对 Flutter 应用根目录（sourceRoot = <src>/apps/flutter/app），
+    # 其余补丁相对仓库根目录。
+    patch_bases = {"0002-nix-flutter-linux.patch": "apps/flutter/app"}
     for patch in sorted(PATCH_DIR.glob("*.patch")):
+        base = tree / patch_bases.get(patch.name, "")
         subprocess.run(
             ["git", "apply", "--check", "-p1", str(patch)],
-            cwd=tree,
+            cwd=base,
             check=True,
         )
         print(f"补丁可用: {patch.name}")

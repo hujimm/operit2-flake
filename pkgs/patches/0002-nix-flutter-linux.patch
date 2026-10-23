@@ -1,7 +1,7 @@
-diff --git a/apps/flutter/app/hook/build.dart b/apps/flutter/app/hook/build.dart
+diff --git a/hook/build.dart b/hook/build.dart
 index 168c43a..f9e6322 100644
---- a/apps/flutter/app/hook/build.dart
-+++ b/apps/flutter/app/hook/build.dart
+--- a/hook/build.dart
++++ b/hook/build.dart
 @@ -30,11 +30,6 @@ void main(List<String> args) async {
      final pluginsRoot = Directory.fromUri(
        input.packageRoot.resolve('../../../plugins/'),
@@ -28,10 +28,10 @@ index 168c43a..f9e6322 100644
  
      if (shouldBuildWebAssets) {
        final fontScript = File.fromUri(
-diff --git a/apps/flutter/app/linux/CMakeLists.txt b/apps/flutter/app/linux/CMakeLists.txt
+diff --git a/linux/CMakeLists.txt b/linux/CMakeLists.txt
 index f3defa1..506762f 100644
---- a/apps/flutter/app/linux/CMakeLists.txt
-+++ b/apps/flutter/app/linux/CMakeLists.txt
+--- a/linux/CMakeLists.txt
++++ b/linux/CMakeLists.txt
 @@ -102,7 +102,7 @@ install(FILES "${FLUTTER_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
  
  set(OPERIT_FLUTTER_BRIDGE_CRATE "${CMAKE_CURRENT_SOURCE_DIR}/../../native/operit-flutter-bridge")
@@ -41,10 +41,10 @@ index f3defa1..506762f 100644
    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
    COMPONENT Runtime)
  
-diff --git a/apps/flutter/app/linux/runner/CMakeLists.txt b/apps/flutter/app/linux/runner/CMakeLists.txt
+diff --git a/linux/runner/CMakeLists.txt b/linux/runner/CMakeLists.txt
 index b6e2563..c60b6d1 100644
---- a/apps/flutter/app/linux/runner/CMakeLists.txt
-+++ b/apps/flutter/app/linux/runner/CMakeLists.txt
+--- a/linux/runner/CMakeLists.txt
++++ b/linux/runner/CMakeLists.txt
 @@ -29,16 +29,17 @@ target_link_libraries(${BINARY_NAME} PRIVATE ${CMAKE_DL_LIBS})
  target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
  
@@ -67,10 +67,10 @@ index b6e2563..c60b6d1 100644
    WORKING_DIRECTORY "${OPERIT_FLUTTER_BRIDGE_CRATE}"
  )
  add_dependencies(operit_flutter_bridge sync_operit_plugins)
-diff --git a/apps/flutter/app/linux/runner/my_application.cc b/apps/flutter/app/linux/runner/my_application.cc
+diff --git a/linux/runner/my_application.cc b/linux/runner/my_application.cc
 index 82e8cfb..917c58d 100644
---- a/apps/flutter/app/linux/runner/my_application.cc
-+++ b/apps/flutter/app/linux/runner/my_application.cc
+--- a/linux/runner/my_application.cc
++++ b/linux/runner/my_application.cc
 @@ -79,7 +79,11 @@ static void register_webview_theme(FlView* view) {
  /// Registers this installed executable for session-bus Plugin SDK activation.
  static void register_plugin_sdk_activation() {
