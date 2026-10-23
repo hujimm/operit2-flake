@@ -1,9 +1,11 @@
 {
   lib,
   rustPlatform,
-  python3,
   callPackage,
 }:
+# GUI 的原生桥（liboperit_flutter_bridge.so）。上游在 GUI 的 CMake 里直接
+# `cargo build` 这个 crate；在 Nix 里把它拆出来，一是让 GUI 的配置不用关心
+# Rust 工具链，二是 CLI 与 GUI 复用同一份编译产物。
 let
   source = callPackage ./source.nix { };
   pluginAssets = callPackage ./plugin-assets.nix { };
@@ -18,33 +20,28 @@ rustPlatform.buildRustPackage {
   cargoBuildFlags = [ "--lib" ];
   doCheck = false;
 
-  nativeBuildInputs = [
-    python3
-    rustPlatform.bindgenHook
-  ];
+  patches = [ ./patches/0001-nix-runtime.patch ];
+
+  nativeBuildInputs = [ rustPlatform.bindgenHook ];
 
   postPatch = ''
-    python3 ${./patch-source.py} "$PWD"
-    mkdir -p core/crates/runtime/application/assets/plugins
-    cp -a ${pluginAssets}/plugins/buildin core/crates/runtime/application/assets/plugins/buildin
+    install -d core/crates/runtime/application/assets/plugins
+    cp -a ${pluginAssets}/plugins/. core/crates/runtime/application/assets/plugins/
   '';
 
-  # core/crates/proxy/local 的 build.rs 会把 Dart 代理写进 apps/flutter/app/lib/core/proxy/generated，
-  # Flutter 构建需要这两个文件，因此随 bridge 一起导出。
+  # `core/crates/proxy/local/build.rs` 会把 Dart 侧的代理代码写进
+  # apps/flutter/app/lib/core/proxy/generated/，GUI 构建需要这两个文件，
+  # 所以随 bridge 一起导出。
   postInstall = ''
-    mkdir -p "$out/share/operit2/dart-proxy"
+    install -d "$out/share/operit2/dart-proxy"
     install -m644 \
       apps/flutter/app/lib/core/proxy/generated/CoreProxyClients.g.dart \
-      "$out/share/operit2/dart-proxy/CoreProxyClients.g.dart"
-    install -m644 \
       apps/flutter/app/lib/core/proxy/generated/CoreProxyModels.g.dart \
-      "$out/share/operit2/dart-proxy/CoreProxyModels.g.dart"
+      "$out/share/operit2/dart-proxy/"
   '';
 
-  meta = {
-    description = "Operit2 Flutter native bridge (liboperit_flutter_bridge.so)";
-    homepage = "https://github.com/AAswordman/Operit2";
-    license = lib.licenses.agpl3Only;
-    platforms = [ "x86_64-linux" "aarch64-linux" ];
+  meta = source.meta // {
+    description = "Operit2 Flutter 原生桥";
+    platforms = lib.platforms.linux;
   };
 }
