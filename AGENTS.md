@@ -17,7 +17,7 @@
 ## 仓库结构
 
 ```
-flake.nix                 # packages / overlays / nixosModules / homeModules / formatter
+flake.nix                 # packages / overlays / nixosModules / formatter / checks
 pkgs/source.nix           # 唯一版本 pin：rev / version / hash，外加共享 meta
 pkgs/plugin-assets.nix    # 内置插件资源（buildin + external），cli 与 bridge 共用
 pkgs/cli.nix              # CLI / TUI / Link 节点（buildRustPackage）
@@ -25,11 +25,12 @@ pkgs/flutter-bridge.nix   # GUI 的 Rust 原生桥 + Dart 代理导出
 pkgs/desktop.nix          # Flutter GUI（buildFlutterApplication）
 pkgs/patches/*.patch      # Nix 专用源码适配，见下表
 pkgs/update.py            # 升级：更新 pin + 校验补丁可应用
-modules/nixos-link.nix    # services.operit2-link（以指定用户常驻，含 CLI 安装）
-modules/nixos-cli.nix     # programs.operit2-cli（仅安装 CLI）
-modules/nixos-desktop.nix # programs.operit2-desktop（系统级）
-modules/home-desktop.nix  # programs.operit2-desktop（Home Manager）
+modules/nixos-link.nix    # services.operit2-link（唯一的模块）
 ```
+
+**只保留一个模块**：只有它做了 systemd 才知道的事（用户、HOME、SIGINT、防火墙）。
+只装 CLI/GUI 不需要模块，`environment.systemPackages = [ pkgs.operit2-cli ]` 即可。
+配对、Space 成员、凭据是运行时状态，永远不要做成 option。
 
 `packages.${system}` 用 `nixpkgs.legacyPackages`；模块用 `pkgs.callPackage ../pkgs/*.nix`
 取默认包，用户可用选项 `package` 覆盖。
