@@ -19,13 +19,11 @@ in
     hash = "sha256-hjxyN+S2hTHYSLMpT0kYIjdkCzXYA0llBB/LzHCzcBY=";
   };
 
+  # 各包共用的元数据。CLI 理论上能跑 aarch64，但本 flake 只提供并验证过
+  # x86_64-linux，因此这里不做未经验证的平台声明。
   meta = {
-    description = "Operit2 AI Agent（Flutter GUI + Rust CLI + 无界面 Link 节点）";
     homepage = "https://github.com/AAswordman/Operit2";
     license = lib.licenses.agpl3Only;
-    platforms = [
-      "x86_64-linux"
-      "aarch64-linux"
-    ];
+    platforms = [ "x86_64-linux" ];
   };
 }

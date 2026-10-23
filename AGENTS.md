@@ -74,8 +74,24 @@ git diff                                # 然后由用户 nix build
 `0001` 适用于所有 Rust 产物和插件资源；`0002` 只适用于 GUI。补丁由
 `pkgs/update.py` 在升级时校验，锚点失效会直接失败而不是静默跳过。
 
+## 与 nixpkgs 惯例的偏差（有意为之）
+
+| 偏差 | 原因 |
+| --- | --- |
+| `meta` 定义在 `pkgs/source.nix`，各包 `source.meta // { ... }` | 四个产物同源同许可，避免重复；nixpkgs 里这种做法不常见 |
+| 没有用 `finalAttrs`（RFC 0035） | 包内没有自引用（version/src 都来自 `source.nix`），套上只是噪音 |
+| `doCheck = false`、无 `passthru.tests` | 上游 Linux 发布流程不跑 `cargo test`；没有可离线运行的测试 |
+| `autoPubspecLock` 用 IFD | 换掉 1760 行 `pubspec.lock.json`；代价是 `nix eval`/`nix flake show` 会触发构建 |
+| 没有 `meta.maintainers` | 个人 flake，暂不对外提 nixpkgs |
+| `services.operit2-link` 未做 systemd 硬化 | 上游会 `exec` 系统工具（xrandr/xdg-open/终端），硬化过紧会让节点静默失效；需构建验证后增量加 |
+
+补丁目前都只作用于本仓库，**没有提交上游**。若上游接受了同类改动（例如去掉
+`.venv` 依赖、固定 ZIP 时间戳），应先删对应补丁再重新 `nix build` 验证。
+
 ## 已知边界
 
+- **必须提交 `flake.lock`**：`nixpkgs` 跟的是 `nixos-unstable` 分支，不锁就是不可复现的。
+  首次 `nix build` 会自动生成，之后请一并提交；改 input 后跑 `nix flake lock`。
 - 桌面 GUI 单进程，关窗即退出；常驻在线能力由 `services.operit2-link` 提供。
 - 节点之间的网络可达性（局域网/公网/overlay）不在本仓范围；`services.operit2-link`
   只负责监听与放行接口，怎么让设备互通由使用者决定。
