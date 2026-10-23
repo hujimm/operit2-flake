@@ -6,13 +6,15 @@
 
 ## 硬性规则
 
-- 不要在本仓库运行 `nix build` / `nix flake check` / `nix eval` / `nix develop` 做验证：
-  改动后由用户在自己机器上构建，`nixos-rebuild` 也由用户执行。`pkgs/update.py` 只用
-  `gh` 和 `nix hash path`（本地哈希），不触发求值。
+- 构建与检查在本仓库本地执行：`nix build .#operit2-cli`、`nix build .#operit2-desktop`、
+  `nix flake check`、`nix fmt`。系统切换（`nixos-rebuild`）仍由用户执行。
+  `pkgs/update.py` 只用 `gh` 和 `nix hash path`（本地哈希）。
 - 访问 GitHub 用 `gh`/`git`，禁止裸 `curl` 请求 GitHub API/raw。
-- 注释用中文。
+- 注释用中文，解释「为什么」，不写「做了什么」。
 - 行为性改动（权限、Link 协议、UI）不要打进补丁，应提交上游；这里只做「让上游在 Nix
   沙箱里按同样语义构建」的替换。
+- 不引入 nixpkgs 风格的形式主义：没有自引用就不套 `finalAttrs`；不写空的
+  `maintainers`；不为了「像上游」加假 option。
 
 ## 仓库结构
 
@@ -39,8 +41,9 @@ modules/nixos-link.nix    # services.operit2-link（唯一的模块）
 
 - CLI、GUI、bridge、插件资源都绑定 `pkgs/source.nix` 的同一个提交。
 - 手机 APK（上游 release）与服务器 CLI、桌面端必须来自同一提交，否则 Link 协议可能不匹配。
-- Flutter 用 nixpkgs 的 `flutter341`（3.41.9）。上游 FVM 固定 `3.41.10-ohos` 分支；
-  差异是否影响 Linux 构建以实际构建为准，若出现 Dart SDK/引擎错误优先查这一项。
+- Flutter 用 nixpkgs 的 `flutter341`（3.41.9）。上游 FVM 固定 `3.41.10-ohos` 分支，
+  其 Linux 引擎带 `FL_NATIVE_VIEW_COMPOSITION_API_VERSION`，官方引擎没有 —— 这是
+  `operit2-desktop` 当前无法构建的唯一原因（见「已知边界」）。
 - nixpkgs 只 follow `nixos-unstable`，不锁旧版。
 - GUI 用 `autoPubspecLock` 直接读上游 `pubspec.lock`，因此仓库里不再保存
   `pubspec.lock.json`；代价是求值期有 IFD。
@@ -50,12 +53,23 @@ modules/nixos-link.nix    # services.operit2-link（唯一的模块）
 ```sh
 python3 pkgs/update.py                  # 跟随 main 最新提交
 python3 pkgs/update.py --rev <sha>      # 固定到指定提交
-git diff                                # 然后由用户 nix build
+nix build .#operit2-cli                 # 先验证 CLI
 ```
 
 脚本会：下载源码归档 → `nix hash path` 算 NAR 哈希 → 从 `apps/cli/Cargo.toml` 读版本 →
-重写 `pkgs/source.nix` → 在临时目录 `git apply --check` 两个补丁。需要 `gh`（已认证）、
-`tar`、`nix`。
+重写 `pkgs/source.nix` → 在临时目录 `git apply --check` 两个补丁（`0002` 以
+`apps/flutter/app` 为根，其余以仓库根）。需要 `gh`（已认证）、`tar`、`nix`。
+
+**上游的 `apps/cli/Cargo.lock` 是过期的**（他们构建不加 `--locked`，cargo 会静默补写）。
+沙箱不能补写，所以 `pkgs/locks/apps-cli.Cargo.lock` 是重新生成的版本，`cli.nix` 用它
+vendor 并在 `postPatch` 写回源码树。升级后若报 lock 不一致，用：
+
+```sh
+cd /tmp && cp -a <源码> op2 && cd op2/apps/cli
+cargo metadata --format-version 1 >/dev/null   # 需要联网
+cp Cargo.lock /home/orion/mygithub/operit2-flake/pkgs/locks/apps-cli.Cargo.lock
+```
+
 
 若 pubspec 里 git 依赖的 `ref` 变化，还要同步 `pkgs/desktop.nix` 的 `gitHashes`
 （缺了会报错并指出缺哪个）。补丁锚点失效时脚本会失败，需人工更新对应 `.patch`。
@@ -93,21 +107,29 @@ git diff                                # 然后由用户 nix build
 
 - **必须提交 `flake.lock`**：`nixpkgs` 跟的是 `nixos-unstable` 分支，不锁就是不可复现的。
   首次 `nix build` 会自动生成，之后请一并提交；改 input 后跑 `nix flake lock`。
+- **GUI 不可构建**：`webview_all_linux` 硬性 `#error` 要求定制引擎的
+  `FL_NATIVE_VIEW_COMPOSITION_API_VERSION`，并调用 `fl_view_get_native_view_overlay` /
+  `fl_view_register_native_view` / `fl_view_unregister_native_view`（官方引擎没有）。
+  `operit2-desktop` 因此不进 `checks`。修复需要自建上游引擎或
+  上游去掉该硬依赖，不要用「打个补丁绕过 webview」来糊弄。
 - 桌面 GUI 单进程，关窗即退出；常驻在线能力由 `services.operit2-link` 提供。
 - 节点之间的网络可达性（局域网/公网/overlay）不在本仓范围；`services.operit2-link`
   只负责监听与放行接口，怎么让设备互通由使用者决定。
-- `services.operit2-link` 与上游模型一致：以 `user`（默认 root）运行 `link listen`，
-  数据用该用户 HOME 的默认目录；不做专用账号/目录隔离，也没有额外包装脚本。
-  权限即该用户的权限（root 就是 root）。
+- `services.operit2-link` 以 `user`（必填，无默认值）运行 `link listen`，数据用该用户
+  HOME 的默认目录；不做专用账号/目录隔离。权限即该用户的权限，而节点能执行工具。
 - 没有验证过两个进程同时打开同一 Operit2 数据目录的行为，与常驻服务并行执行配对
   类命令前先停服务。
 
-## 验证（由用户执行）
+## 验证
 
 ```sh
-nix build .#operit2-cli .#operit2-desktop
+nix build .#operit2-cli
+nix build .#checks.x86_64-linux.module-eval
 nix flake check
+nix fmt -- --check .
 ```
+
+`nix flake check` 只构建 CLI 与模块检查（GUI 不在其中）。
 
 桌面启动后确认 `~/.local/share/dbus-1/services/org.operit.PluginSdk.service` 的 `Exec`
 指向 wrapper；服务器上确认 `systemctl status operit2-link`、`journalctl -u operit2-link`。

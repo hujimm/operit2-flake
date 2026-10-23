@@ -107,20 +107,37 @@ operit2 cli link space join <B-node-id>
 
 ## 输出
 
-- `packages.x86_64-linux.{operit2-cli,operit2-desktop,default}`
+- `packages.x86_64-linux.operit2-cli`（`default` 也指向它）
+- `packages.x86_64-linux.operit2-desktop`：目前无法构建，见下面第一条限制
 - `overlays.default`：注入 `pkgs.operit2-cli` / `pkgs.operit2-desktop`
 - `nixosModules.link` / `nixosModules.default`：`services.operit2-link`
 - `formatter.x86_64-linux`：`nix fmt` 用 nixfmt
-- `checks.x86_64-linux`：`nix flake check` 会构建两个产物
+- `devShells.x86_64-linux.default`：nixd / nixfmt / statix / deadnix
+- `checks.x86_64-linux`：`operit2-cli` + `module-eval`（后者只求值模块，不构建整机）
+
+## 验证状态
+
+`nix build .#operit2-cli` 与 `nix build .#checks.x86_64-linux.module-eval` 通过，CLI 的
+`cli link peers` 能正常输出。以下**没有**验证：GUI 构建、双机配对、Space 审批、
+EasyTier 下的实际连通性 —— 这些需要真实的第二台设备和上游引擎。
 
 ## 已知限制
 
+- **GUI 目前无法用 Nix 构建。** 上游 `webview_all_linux` 插件硬性要求定制 Flutter 引擎：
+
+  ```
+  error: "Linux WebView requires the Operit Linux native-composition engine patch."
+  error: use of undeclared identifier 'fl_view_get_native_view_overlay'
+  ```
+
+  上游用 `AAswordman/flutter-ohos` 分支（其 release 只提供 Windows 引擎产物），
+  nixpkgs 的 `flutter341` 是官方引擎，编译到该插件必然失败。要修只有两条路：把上游
+  引擎打成 Nix 包，或上游去掉这个硬依赖。`operit2-desktop` 因此不参与 `nix flake check`，
+  构建会在 `webview_all_linux` 处失败。
 - 桌面 GUI 单进程，关闭即退出，没有后台常驻；需要 7×24 在线时用服务器上的
   `services.operit2-link`。
 - 同一用户下 GUI 与 `services.operit2-link` 会共用同一份监听配置（`listen` 每次启动
   都会写回），端口冲突时只能跑一个。
-- 上游 FVM 固定的是 `3.41.10-ohos` 分支，本包用 nixpkgs 的 `flutter341`（3.41.9），
-  差异是否影响 Linux 构建以实际构建为准。
 - 脚本式 ToolPkg（如 `workflow`）在 Nix 构建中按普通目录打包，不运行 pnpm；
   其 `dist/` 已随上游提交。
 - GUI 用 `autoPubspecLock` 直接读上游 `pubspec.lock`（依赖 import-from-derivation，
