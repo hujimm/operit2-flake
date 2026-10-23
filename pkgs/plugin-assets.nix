@@ -36,9 +36,11 @@ stdenvNoCC.mkDerivation {
     runHook preBuild
 
     # 同步脚本用 `git ls-files --exclude-standard` 枚举要打包的文件，
-    # 而源码归档里没有 .git，所以临时建一个工作区。
+    # 而源码归档里没有 .git，所以临时建一个工作区。不加 --force：让
+    # .gitignore 生效，与上游 `--exclude-standard` 的语义一致，避免把生成物
+    # 或工作区残留带进产物。
     git init --quiet
-    git add --force --all
+    git add --all
 
     python3 plugins/tools/sync_plugin_packages.py --source runtime --no-hot-reload
 

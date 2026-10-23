@@ -6,7 +6,7 @@
   };
 
   outputs =
-    { nixpkgs, ... }:
+    { self, nixpkgs }:
     let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
@@ -47,5 +47,11 @@
       };
 
       formatter.${system} = pkgs.nixfmt;
+
+      # `nix flake check` 的唯一信号来源；仓库没有 CI，所以这里显式把两个
+      # 产物纳入检查（等价于 nix build 两者）。
+      checks.${system} = {
+        inherit (self.packages.${system}) operit2-cli operit2-desktop;
+      };
     };
 }

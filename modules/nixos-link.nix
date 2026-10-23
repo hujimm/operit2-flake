@@ -9,7 +9,9 @@
 }:
 let
   cfg = config.services.operit2-link;
-  userHome = config.users.users.${cfg.user}.home;
+  # user 可能是调用者忘了定义的用户；这里给一个类型正确的兜底值，真正的
+  # 拦截交给下面的 assertions（否则会在求值期抛 attribute missing）。
+  userHome = lib.attrByPath [ cfg.user "home" ] "/var/lib/operit2" config.users.users;
 
   listenArgs =
     [
@@ -99,6 +101,22 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = builtins.hasAttr cfg.user config.users.users;
+        message = ''
+          services.operit2-link.user = "${cfg.user}" 不存在。
+          节点数据会写在该用户 HOME 下的默认目录，请先用 users.users.${cfg.user} 定义该用户。
+        '';
+      }
+      {
+        assertion = !(builtins.elem "tcp" cfg.transports) || builtins.length cfg.transports == 1;
+        message = ''
+          services.operit2-link.transports：tcp 不能与 http/ws 共用同一端口。
+        '';
+      }
+    ];
+
     systemd.services.operit2-link = {
       description = "Operit2 CLI Link node";
       wantedBy = [ "multi-user.target" ];
