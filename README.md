@@ -37,7 +37,7 @@ source.nix ──┬───────┤
 ```nix
 # flake.nix
 inputs.operit2 = {
-  url = "github:liyinuo2006/operit2-flake";
+  url = "github:hujimm/operit2-flake";
   inputs.nixpkgs.follows = "nixpkgs";
 };
 ```
